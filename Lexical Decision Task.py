@@ -2,8 +2,7 @@ import pandas as pd
 from psychopy.gui import DlgFromDict
 from psychopy.visual import Window, TextStim, ImageStim, ShapeStim, Circle
 from psychopy.core import Clock, quit, wait
-from psychopy.event import Mouse
-from psychopy.hardware.keyboard import Keyboard
+from psychopy.event import Mouse, getKeys, clearEvents
 
 
 ### DIALOG BOX ROUTINE ###
@@ -12,22 +11,27 @@ dlg = DlgFromDict(exp_info)
 
 # If pressed Cancel, abort!
 if not dlg.OK:
+    print("Dialog cancelled, quitting...")
     quit()
 else:
+    print("Dialog OK, validating input...")
     # Quit when either the participant id or age is not filled in
     if not exp_info['participant_id'] or not exp_info['age']:
+        print("Missing participant ID or age, quitting...")
         quit()
         
     # Also quit in case of invalid participant id or age
     if int(exp_info['participant_id']) > 99 or int(exp_info['age']) < 18:
+        print("Invalid participant ID or age, quitting...")
         quit()
-    else:  # let's star the experiment!
+    else:  # let's start the experiment!
         print(f"Started experiment for participant {exp_info['participant_id']} "
                  f"with age {exp_info['age']}.")
 
 # Initialize a fullscreen window with my monitor (HD format) size
 # and my monitor specification called "samsung" from the monitor center
 win = Window(size=(1920, 1080), fullscr=False, monitor='samsung')
+print("Window created successfully!")
 
 # Also initialize a mouse
 mouse = Mouse(visible=True)
@@ -35,9 +39,9 @@ mouse = Mouse(visible=True)
 # Initialize a (global) clock
 clock = Clock()
 
-# Initialize Keyboard
-kb = Keyboard()
-kb.clearEvents()
+print("Clearing events...")
+clearEvents()
+print("Events cleared successfully!")
 
 ### START BODY OF EXPERIMENT ###
 
@@ -61,18 +65,15 @@ instruct_txt = TextStim(win, instruct_txt, alignText='left', height=0.085)
 instruct_txt.draw()
 win.flip()
 
-# Initialize keyboard and wait for response
-kb = Keyboard()
+clearEvents()
 while True:
-    keys = kb.getKeys()
+    keys = getKeys()
     if 'return' in keys:
-        # The for loop was optional
-        for key in keys:
-            print(f"The {key.name} key was pressed within {key.rt:.3f} seconds for a total of {key.duration:.3f} seconds.")
-        break  # break out of the loop!
+        print("Return key was pressed - starting experiment!")
+        break
 
 ### TRIAL LOOP ROUTINE ###
-# Read in conditions file
+print("Loading conditions file...")
 cond_df = pd.read_excel('word_conditions.xlsx')
 cond_df = cond_df.sample(frac=1)
 
@@ -104,10 +105,10 @@ for idx, row in cond_df.iterrows():
     cond_df.loc[idx, 'onset'] = -1
 
     trial_clock.reset()
-    kb.clock.reset()
-    while trial_clock.getTime() < 2:
-        # Draw stuff
-        
+    clearEvents()
+    response_given = False
+
+    while trial_clock.getTime() < 2 and not response_given:
         if trial_clock.getTime() < 0.5:
             stim_txt.draw()
         else:
@@ -116,27 +117,27 @@ for idx, row in cond_df.iterrows():
         win.flip()
         if cond_df.loc[idx, 'onset'] == -1:
             cond_df.loc[idx, 'onset'] = clock.getTime()
-        
-        # Get responses
-        resp = kb.getKeys()
-        if resp:
-            # Stop the experiment when 'q' is pressed
-            if 'q' in resp:
+
+        keys = getKeys(timeStamped=trial_clock)
+        if keys:
+            key_name, key_time = keys[0]
+            print(f"Key {key_name} pressed at {key_time:.3f} seconds.")
+
+            if key_name == 'q':
+                print("Quit key pressed, exiting...")
                 quit()
 
-            # Log reaction time and response
-            cond_df.loc[idx, 'rt'] = resp[-1].rt
-            cond_df.loc[idx, 'resp'] = resp[-1].name
+            cond_df.loc[idx, 'rt'] = key_time
+            cond_df.loc[idx, 'resp'] = key_name
+            response_given = True
 
-            # Log correct/incorrect
-            if resp[-1].name == 'left' and curr_word == 'yes':
-               cond_df.loc[idx, 'correct'] = 1
-               correct_txt_stim.draw()
-               win.flip()
-               wait(2)
+            if key_name == 'left' and curr_word == 'yes':
+                cond_df.loc[idx, 'correct'] = 1
+                correct_txt_stim.draw()
+                win.flip()
+                wait(2)
 
-
-            elif resp[-1].name == 'right' and curr_word == 'no':
+            elif key_name == 'right' and curr_word == 'no':
                 cond_df.loc[idx, 'correct'] = 1
                 correct_txt_stim.draw()
                 win.flip()
@@ -172,7 +173,7 @@ wait(2)
 cond_df.to_csv(f"sub-{exp_info['participant_id']}_results.csv")
 
 
-# Show instructions and wait 
+# Show instructions and wait
 instruct1_txt = TextStim(win, text="thank you for participating", alignText='left', height=0.085)
 instruct1_txt.draw()
 win.flip()
